@@ -3,6 +3,8 @@
   :url "http://github.com/hyPiRion/subtex"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
+  :prep-tasks [["compile" "com.hypirion.subtex.records"]
+               "javac" "compile"]
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]
   :dependencies [[org.clojure/clojure "1.8.0-beta1"]])

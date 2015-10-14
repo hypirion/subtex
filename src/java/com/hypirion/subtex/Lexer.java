@@ -1,7 +1,7 @@
 package com.hypirion.subtex;
 
+import clojure.lang.Keyword;
 import java.util.function.Function;
-
 
 // DFA of a subset of LaTeX.
 class Lexer {
@@ -14,13 +14,18 @@ class Lexer {
     }
 
     enum Token {
-        Text,
-        ParaEnd,
-        Call,
-        OpenBrace,
-        CloseBrace,
-        Quoted,
-        Error
+        Text("text"),
+        ParaEnd("para-end"),
+        Call("call"),
+        OpenBrace("open-brace"),
+        CloseBrace("close-brace"),
+        Quoted("quoted"),
+        Error("error");
+
+        Token(String kw) {
+            this.keyword = Keyword.intern(null, kw);
+        }
+        Keyword keyword;
         // TODO? Math
     }
 
