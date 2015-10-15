@@ -132,7 +132,12 @@ class Lexer {
     }
 
     State stateTextNewline(Character c) {
-        if (c == '\n') {
+        switch (c) {
+        case '{': case '}': case '%': case '\\':
+            token = Token.Text;
+            backtrack = 1;
+            return State.End;
+        case '\n':
             token = Token.Text;
             backtrack = 2;
             return State.End;
