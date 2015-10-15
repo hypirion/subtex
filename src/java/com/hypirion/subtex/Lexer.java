@@ -58,13 +58,10 @@ class Lexer {
     }
 
     State stateBegin(Character c) {
-        if (Character.isWhitespace(c) && c != '\n') {
-            return State.Ignore;
-        }
         switch (c) {
         case '\n':
             state = this::stateNewline0;
-            return State.Ignore;
+            return State.Continue;
         case '{':
             token = Token.OpenBrace;
             return State.End;
@@ -149,16 +146,16 @@ class Lexer {
     State stateNewline0(Character c) {
         if (c == '\n') {
             state = this::stateNewlines;
-            return State.Ignore;
+            return State.Continue;
         } else {
             state = this::stateBegin;
-            return State.Ignore;
+            return State.Continue;
         }
     }
 
     State stateNewlines(Character c) {
         if (c == '\n') {
-            return State.Ignore;
+            return State.Continue;
         } else {
             backtrack = 1;
             token = Token.ParaEnd;

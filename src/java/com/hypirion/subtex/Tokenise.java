@@ -85,9 +85,9 @@ public class Tokenise implements Iterator<Item> {
                 case Text:
                 case Call:
                 case Quoted:
+                case ParaEnd:
                     item = new Item(lexer.token.keyword, val.substring(start, end));
                     break;
-                case ParaEnd:
                 case OpenBrace:
                 case CloseBrace:
                     item = new Item(lexer.token.keyword, null);
