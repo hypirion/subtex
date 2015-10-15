@@ -41,11 +41,20 @@ class Lexer {
         error = null;
     }
 
+    State state(Character c) {
+        return state.apply(c);
+    }
+
     void reset() {
         token = Token.Error;
         state = this::stateBegin;
         backtrack = 0;
         error = null;
+    }
+
+    State eof() { // FIXME.
+        error = "eof";
+        return State.Error;
     }
 
     State stateBegin(Character c) {
@@ -64,7 +73,7 @@ class Lexer {
             return State.End;
         case '\\':
             state = this::stateSlash0;
-            return State.Continue;
+            return State.Ignore;
         case '%':
             state = this::stateInComment;
             return State.Ignore;
