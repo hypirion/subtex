@@ -43,13 +43,8 @@ public class Tokenise implements Iterator<Item> {
             return;
         }
         lexer.reset();
-        State state = State.Ignore;
-        while (start < val.length() && state == State.Ignore) {
-            state = lexer.state(val.charAt(start));
-            start++;
-        }
         end = start;
-        start -= 1;
+        State state = State.Continue;
         while (end < val.length() && state == State.Continue) {
             state = lexer.state(val.charAt(end));
             end++;
@@ -66,33 +61,13 @@ public class Tokenise implements Iterator<Item> {
                     state = lexer.eof();
                     continue loop;
                 }
-            case Ignore:
-                if (end < val.length()) {
-                    throw new RuntimeException("Illegal internal state");
-                } else { // TODO: This isn't correct. We can ignore data while
-                         // still
-                    finished = true;
-                    item = null;
-                    return;
-                }
             case Error:
                 finished = true;
                 item = new Item(Token.Error.keyword, lexer.error);
                 return;
             case End:
                 end -= lexer.backtrack;
-                switch (lexer.token) {
-                case Text:
-                case Call:
-                case Quoted:
-                case ParaEnd:
-                    item = new Item(lexer.token.keyword, val.substring(start, end));
-                    break;
-                case OpenBrace:
-                case CloseBrace:
-                    item = new Item(lexer.token.keyword, null);
-                    break;
-                }
+                item = new Item(lexer.token.keyword, val.substring(start, end));
                 start = end;
                 return;
             }

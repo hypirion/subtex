@@ -9,7 +9,6 @@ class Lexer {
     enum State {
         Continue,
         End,
-        Ignore,
         Error
     }
 
@@ -20,6 +19,7 @@ class Lexer {
         OpenBrace("open-brace"),
         CloseBrace("close-brace"),
         Quoted("quoted"),
+        Comment("comment"),
         Error("error");
 
         Token(String kw) {
@@ -70,10 +70,10 @@ class Lexer {
             return State.End;
         case '\\':
             state = this::stateSlash0;
-            return State.Ignore;
+            return State.Continue;
         case '%':
             state = this::stateInComment;
-            return State.Ignore;
+            return State.Continue;
         default:
             state = this::stateText;
             return State.Continue;
@@ -110,9 +110,11 @@ class Lexer {
     State stateInComment(Character c) {
         if (c == '\n') {
             state = this::stateBegin;
-            return State.Ignore;
+            token = Token.Comment;
+            backtrack = 1;
+            return State.End;
         }
-        return State.Ignore;
+        return State.Continue;
     }
 
     State stateText(Character c) {
@@ -144,13 +146,18 @@ class Lexer {
     }
 
     State stateNewline0(Character c) {
-        if (c == '\n') {
+        switch (c) {
+        case '{': case '}': case '%': case '\\':
+            token = Token.Text;
+            backtrack = 1;
+            return State.End;
+        case '\n':
             state = this::stateNewlines;
             return State.Continue;
-        } else {
-            state = this::stateBegin;
-            return State.Continue;
+
         }
+        state = this::stateBegin;
+        return State.Continue;
     }
 
     State stateNewlines(Character c) {
