@@ -1,7 +1,8 @@
 (ns com.hypirion.subtex
   (:refer-clojure :exclude [read])
   (:require [com.hypirion.subtex.pass.minted :as minted]
-            [com.hypirion.subtex.pass :refer :all])
+            [com.hypirion.subtex.pass :as pass :refer :all]
+            [com.hypirion.subtex.pass.hiccup :as hiccup])
   (:import (com.hypirion.subtex Tokenise)
            (java.util ArrayList)))
 
@@ -16,37 +17,43 @@
    (fn [res rf _ val _]
      (rf res {:type :param :value val}))))
 
-(defn to-invokation [^ArrayList al]
-  (let [call (.get al 0)
-        args (vec (.subList al 1 (.size al)))]
-    (.clear al)
-    {:type :invoke :name (:value call) :args args}))
+(defn to-invokation [call subrf]
+  (let [val {:type :invoke
+             :name (:value @call)
+             :args (pass/sub-complete @subrf)}]
+    (vreset! call nil)
+    (vreset! subrf nil)
+    val))
 
 (def group-calls
   (reenterable
    (fn [rf]
-     (let [al (ArrayList.)]
+     (let [call (volatile! nil)
+           subrf (volatile! nil)]
        (fn
          ([] (rf))
          ([res]
-          (let [result (if (.isEmpty al)
+          (let [result (if (nil? @call)
                          res
-                         (let [v (to-invokation al)]
+                         (let [v (to-invokation call subrf)]
                            (unreduced (rf res v))))]
             (rf result)))
          ([res input]
-          (if-not (.isEmpty al)
+          (if @call
             (case (:type input)
-              :param (do (.add al input) res)
-              :call (let [val (to-invokation al)]
-                      (.add al input)
+              :param (do (vswap! subrf pass/sub-step input) res)
+              :call (let [val (to-invokation call subrf)]
+                      (vreset! call input)
+                      (vreset! subrf (subreduction rf))
                       (rf res val))
               (-> res
-                  (rf (to-invokation al))
+                  (rf (to-invokation call subrf))
                   (rf input)))
             (case (:type input)
               :param (throw (ex-info "Unmatched parameter" {:value input}))
-              :call (do (.add al input) res)
+              :call (do (vreset! call input)
+                        (vreset! subrf (subreduction rf))
+                        res)
               (rf res input)))))))))
 
 ;; This doesn't really make sense because we can't really drag out the first

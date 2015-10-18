@@ -44,6 +44,8 @@
         (stack-reset-last! al (update inner' :val f (:rf inner') (:start inner) val stop))
         res)))) ;; is on an inner type: attach on that instead and return res
 
+;; TODO: formalise what a "subreduction" is, and use it here. Can be as simple
+;; as the thing below.
 (defn group-with [start-pred stop-pred f]
   (reenterable
    (fn [rf]
@@ -69,3 +71,18 @@
                     res)
                 
                 :otherwise (rf res elem))))))))
+
+(defn subreduction
+  [rf]
+  (let [rf' (afresh rf)]
+    {:value (rf')
+     :rf rf'}))
+
+(defn sub-step
+  [{:keys [value rf]} elem]
+  {:value (rf value elem)
+   :rf rf})
+
+(defn sub-complete
+  [{:keys [value rf]}]
+  (rf value))
