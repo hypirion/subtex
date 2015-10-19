@@ -76,7 +76,7 @@
       ([res]
        (if-not (identical? (:state @state) :start)
          (throw (ex-info "Unmatched minted environment start" {}))
-         (reduce rf res (:acc @state))))
+         (rf (reduce rf res (:acc @state)))))
       ([res val]
        (let [[ret state'] (tick rf res val @state)]
          (vreset! state state')
