@@ -84,8 +84,15 @@
 (def remove-comments
   (remove #(identical? (:type %) :comment)))
 
+(defn rf-conj!
+  ([] (transient []))
+  ([res] (persistent! res))
+  ([res input] (conj! res input)))
+
 (defn read
   [data]
-  (transduce (comp minted/process match-braces group-calls group-env remove-comments)
-             conj []
+  (transduce (comp minted/process remove-comments match-braces group-calls
+                   group-env hiccup/item-to-li hiccup/itemize-to-ul
+                   hiccup/enumerate-to-ol hiccup/common-invokes)
+             rf-conj! (transient [:body])
              (iterator-seq (Tokenise. data))))
