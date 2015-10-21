@@ -3,26 +3,28 @@
   (:import (java.util ArrayList)))
 
 (defn transform-invoke
-  [name f]
-  (fn [rf]
-    (fn ([] (rf))
-      ([res] (rf res))
-      ([res input]
-       (if (and (identical? (:type input) :invoke)
-                (= name (:name input)))
-         (rf res (apply f (:args input)))
-         (rf res input))))))
+  [f]
+  (pass/stateless-xf
+   (fn [rf]
+     (fn ([] (rf))
+       ([res] (rf res))
+       ([res input]
+        (if (and (identical? (:type input) :invoke)
+                 (= name (:name input)))
+          (rf res (apply f (:args input)))
+          (rf res input)))))))
 
 (defn vectorize-invoke
   [name vect]
-  (fn [rf]
-    (fn ([] (rf))
-      ([res] (rf res))
-      ([res input]
-       (if (and (identical? (:type input) :invoke)
-                (= name (:name input)))
-         (rf res [vect (-> input :args first :value seq)])
-         (rf res input))))))
+  (pass/stateless-xf
+   (fn [rf]
+     (fn ([] (rf))
+       ([res] (rf res))
+       ([res input]
+        (if (and (identical? (:type input) :invoke)
+                 (= name (:name input)))
+          (rf res [vect (-> input :args first :value seq)])
+          (rf res input)))))))
 
 (def h1 (vectorize-invoke "\\title" :h1))
 (def h2 (vectorize-invoke "\\section" :h2))
@@ -30,12 +32,12 @@
 (def h4 (vectorize-invoke "\\subsubsection" :h4))
 
 (def strong (vectorize-invoke "\\textbf" :strong))
-(def em (vectorize-invoke "\\emph" :em))
-(def sub (vectorize-invoke "\\textsubscript" :sub))
-(def sup (vectorize-invoke "\\textsuperscript" :sub))
+(def em     (vectorize-invoke "\\emph" :em))
+(def sub    (vectorize-invoke "\\textsubscript" :sub))
+(def sup    (vectorize-invoke "\\textsuperscript" :sup))
 
 (def common-invokes
-  (apply comp (map pass/reenterable [h1 h2 h3 h4 strong em sub sup])))
+  (comp h1 h2 h3 h4 strong em sub sup))
 
 (defn- to-li [subrf]
   (let [val [:li (seq (pass/sub-complete @subrf))]]
@@ -46,7 +48,7 @@
   (identical? ::none val))
 
 (def item-to-li
-  (pass/reenterable
+  (pass/stateful-xf
    (fn [rf]
      (let [in-item (volatile! ::none)]
        (fn ([] (rf))
@@ -71,32 +73,34 @@
                 :otherwise
                 (rf res input))))))))
 
-(defn itemize-to-ul
+(def itemize-to-ul
   "Everything not directly inside a [:li ...] is collateral damage. Also, args
   are ignored."
-  [rf]
-  (fn ([] (rf))
-    ([res]
-     (rf res))
-    ([res input]
-     (if (and (identical? (:type input) :env)
-              (= "itemize" (:name input)))
-       (rf res [:ul (filter #(and (vector? %)
-                                  (identical? (first %) :li))
-                            (:value input))])
-       (rf res input)))))
+  (pass/stateless-xf
+   (fn  [rf]
+     (fn ([] (rf))
+       ([res]
+        (rf res))
+       ([res input]
+        (if (and (identical? (:type input) :env)
+                 (= "itemize" (:name input)))
+          (rf res [:ul (filter #(and (vector? %)
+                                     (identical? (first %) :li))
+                               (:value input))])
+          (rf res input)))))))
 
-(defn enumerate-to-ol
+(def enumerate-to-ol
   "Everything not directly inside a [:li ...] is collateral damage. Also, args
   are ignored."
-  [rf]
-  (fn ([] (rf))
-    ([res]
-     (rf res))
-    ([res input]
-     (if (and (identical? (:type input) :env)
-              (= "enumerate" (:name input)))
-       (rf res [:ol (filter #(and (vector? %)
-                                  (identical? (first %) :li))
-                            (:value input))])
-       (rf res input)))))
+  (pass/stateless-xf
+   (fn [rf]
+     (fn ([] (rf))
+       ([res]
+        (rf res))
+       ([res input]
+        (if (and (identical? (:type input) :env)
+                 (= "enumerate" (:name input)))
+          (rf res [:ol (filter #(and (vector? %)
+                                     (identical? (first %) :li))
+                               (:value input))])
+          (rf res input)))))))

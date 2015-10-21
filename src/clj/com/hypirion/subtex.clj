@@ -1,13 +1,13 @@
 (ns com.hypirion.subtex
   (:refer-clojure :exclude [read])
   (:require [com.hypirion.subtex.pass.minted :as minted]
-            [com.hypirion.subtex.pass :as pass :refer :all]
+            [com.hypirion.subtex.pass :as pass]
             [com.hypirion.subtex.pass.hiccup :as hiccup])
   (:import (com.hypirion.subtex Tokenise)
            (java.util ArrayList)))
 
 (def match-braces
-  (group-with
+  (pass/group-with
    (fn [elem] (case (:type elem)
                :open-brace true
                :close-brace (ex-info "Unmatched closing brace" {:value elem})
@@ -26,7 +26,7 @@
     val))
 
 (def group-calls
-  (reenterable
+  (pass/stateful-xf
    (fn [rf]
      (let [call (volatile! nil)
            subrf (volatile! nil)]
@@ -44,7 +44,7 @@
               :param (do (vswap! subrf pass/sub-step input) res)
               :call (let [val (to-invokation call subrf)]
                       (vreset! call input)
-                      (vreset! subrf (subreduction rf))
+                      (vreset! subrf (pass/subreduction rf))
                       (rf res val))
               (-> res
                   (rf (to-invokation call subrf))
@@ -52,7 +52,7 @@
             (case (:type input)
               :param (throw (ex-info "Unmatched parameter" {:value input}))
               :call (do (vreset! call input)
-                        (vreset! subrf (subreduction rf))
+                        (vreset! subrf (pass/subreduction rf))
                         res)
               (rf res input)))))))))
 
@@ -63,7 +63,7 @@
   (get-in env [:args 0 :value 0 :value]))
 
 (def group-env
-  (group-with
+  (pass/group-with
    (fn [elem] (case (:type elem)
                :invoke (case (:name elem)
                          "\\begin" true
@@ -82,17 +82,21 @@
               :value val}))))
 
 (def remove-comments
-  (remove #(identical? (:type %) :comment)))
+  (pass/stateful-xf
+   (remove #(identical? (:type %) :comment))))
 
-(defn rf-conj!
-  ([] (transient []))
-  ([res] (persistent! res))
-  ([res input] (conj! res input)))
+(def rf-conj!
+  (pass/stateless-rf
+   (fn
+     ([] (transient []))
+     ([res] (persistent! res))
+     ([res input] (conj! res input)))))
 
 (defn read
   [data]
-  (transduce (comp minted/process remove-comments match-braces group-calls
-                   group-env hiccup/item-to-li hiccup/itemize-to-ul
-                   hiccup/enumerate-to-ol hiccup/common-invokes)
+  (transduce (comp minted/process remove-comments match-braces
+                   group-calls group-env hiccup/item-to-li hiccup/itemize-to-ul
+                   hiccup/enumerate-to-ol hiccup/common-invokes
+                   )
              rf-conj! (transient [:body])
              (iterator-seq (Tokenise. data))))

@@ -1,22 +1,56 @@
 (ns com.hypirion.subtex.pass
   (:import (java.util ArrayList)))
 
-(defprotocol Reenterable
-  (afresh [this]))
+(defprotocol Reinitializable
+  (reinit [this]))
 
-(extend-type Object
-  Reenterable
-  (afresh [this] this))
+(defn verify-reinitializable
+  "Verifies that rf is reinitializable, and if not, throws an exception."
+  [rf]
+  (when-not (extends? Reinitializable (type rf))
+    (throw (ex-info "Reducer function must be reinitializable"
+                    {:type (type rf) :val rf}))))
 
-(defn reenterable [xf]
+(defprotocol Stateless)
+
+(defn stateless-rf
+  "Returns a stateless recursive reducer."
+  [rf]
+  (reify clojure.lang.IFn
+    (invoke [_] (rf))
+    (invoke [_ a] (rf a))
+    (invoke [_ a b] (rf a b))
+    Reinitializable
+    (reinit [this] this)
+    Stateless))
+
+(defn stateful-rf
+  "Takes a stateful transducer and a reducer, and returns a stateful recursive
+  reducer."
+  [xf rf]
+  (let [rf' (xf rf)]
+    (reify clojure.lang.IFn
+      (invoke [_] (rf'))
+      (invoke [_ a] (rf' a))
+      (invoke [_ a b] (rf' a b))
+      Reinitializable
+      (reinit [_] (stateful-rf xf (reinit rf))))))
+
+(defn stateless-xf
+  "Takes a transducer and returns a stateless recursive transducer."
+  [xf]
   (fn [rf]
-    (let [rf' (xf rf)]
-      (reify clojure.lang.IFn
-        (invoke [_] (rf'))
-        (invoke [_ a] (rf' a))
-        (invoke [_ a b] (rf' a b))
-        Reenterable
-        (afresh [_] (xf (afresh rf)))))))
+    (verify-reinitializable rf)
+    (if (extends? Stateless (type rf)) ;; no need to reinitialise below
+      (stateless-rf (xf rf))
+      (stateful-rf xf rf))))
+
+(defn stateful-xf
+  "Takes a transducer and returns a stateful recursive transducer."
+  [xf]
+  (fn [rf]
+    (verify-reinitializable rf)
+    (stateful-rf xf rf)))
 
 (defn stack-last [^ArrayList al]
   (.get al (dec (.size al))))
@@ -47,22 +81,24 @@
 ;; TODO: formalise what a "subreduction" is, and use it here. Can be as simple
 ;; as the thing below.
 (defn group-with [start-pred stop-pred f]
-  (reenterable
+  (stateful-xf
    (fn [rf]
      (let [al (ArrayList.)]
        (fn
          ([] (rf))
-         ([res] (if (.isEmpty al)
-                  (rf res)
-                  (throw (ex-info "Unmatched opening value"
-                                  {:value (:start (stack-last al))}))))
+         ([res] 
+          (if (.isEmpty al)
+            (rf res)
+            (throw (ex-info (str "Unmatched opening value")
+                            {:value (:start (stack-last al))
+                             :collected (vec al)}))))
          ([res elem]
           (cond (and (not (.isEmpty al))
                      (stop-pred (:start (stack-last al)) elem))
                 (pop-from-stack al rf res f elem)
                 
                 (start-pred elem)
-                (let [newrf (afresh rf)]
+                (let [newrf (reinit rf)]
                   (stack-push al {:start elem :rf newrf :val (newrf)})
                   res)
                 
@@ -74,7 +110,7 @@
 
 (defn subreduction
   [rf]
-  (let [rf' (afresh rf)]
+  (let [rf' (reinit rf)]
     {:value (rf')
      :rf rf'}))
 

@@ -1,4 +1,5 @@
-(ns com.hypirion.subtex.pass.minted)
+(ns com.hypirion.subtex.pass.minted
+  (:require [com.hypirion.subtex.pass :as pass]))
 
 (def ^:private begin-minted-match
   [[:call "\\begin"] [:open-brace "{"] [:text "minted"] [:close-brace "}"]])
@@ -70,14 +71,16 @@
          {:state :start :acc []}]
         [res (assoc state :acc new-acc)]))))
 
-(defn process [rf]
-  (let [state (volatile! {:state :start :acc []})]
-    (fn ([] (rf))
-      ([res]
-       (if-not (identical? (:state @state) :start)
-         (throw (ex-info "Unmatched minted environment start" {}))
-         (rf (reduce rf res (:acc @state)))))
-      ([res val]
-       (let [[ret state'] (tick rf res val @state)]
-         (vreset! state state')
-         ret)))))
+(def process
+  (pass/stateful-xf
+   (fn [rf]
+     (let [state (volatile! {:state :start :acc []})]
+       (fn ([] (rf))
+         ([res]
+          (if-not (identical? (:state @state) :start)
+            (throw (ex-info "Unmatched minted environment start" {}))
+            (rf (reduce rf res (:acc @state)))))
+         ([res val]
+          (let [[ret state'] (tick rf res val @state)]
+            (vreset! state state')
+            ret)))))))
