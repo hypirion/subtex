@@ -1,4 +1,4 @@
-(ns com.hypirion.subtex.pass.hiccup
+(ns com.hypirion.subtex.hiccup
   (:require [com.hypirion.rexf :as rexf])
   (:import (java.util ArrayList)))
 

@@ -1,20 +1,20 @@
 (ns com.hypirion.subtex
   (:refer-clojure :exclude [read])
   (:require [com.hypirion.rexf :as rexf]
-            [com.hypirion.subtex.pass.minted :as minted]
-            [com.hypirion.subtex.pass.hiccup :as hiccup])
+            [com.hypirion.subtex.minted :as minted]
+            [com.hypirion.subtex.hiccup :as hiccup])
   (:import (com.hypirion.subtex Tokenise)))
 
 (def match-braces
-  (rexf/group-with*
+  (rexf/group-with
    (fn [elem] (case (:type elem)
                :open-brace true
                :close-brace (ex-info "Unmatched closing brace" {:value elem})
                false))
    (fn [_ end]
      (identical? :close-brace (:type end)))
-   (fn [res rf _ val _]
-     (rf res {:type :param :value val}))))
+   (fn [_ val _]
+     {:type :param :value val})))
 
 (defn to-invokation [call subrf]
   (let [val {:type :invoke
@@ -62,7 +62,7 @@
   (get-in env [:args 0 :value 0 :value]))
 
 (def group-env
-  (rexf/group-with*
+  (rexf/group-with
    (fn [elem] (case (:type elem)
                :invoke (case (:name elem)
                          "\\begin" true
@@ -74,11 +74,11 @@
       (identical? (:type end) :invoke)
       (= "\\end" (:name end))
       (= (first (:args start)) (first (:args start)))))
-   (fn [res rf start val _]
-     (rf res {:type :env
-              :name (raw-env-name start)
-              :args (vec (rest (:args start)))
-              :value val}))))
+   (fn [start val _]
+     {:type :env
+      :name (raw-env-name start)
+      :args (vec (rest (:args start)))
+      :value val})))
 
 (def remove-comments
   (rexf/stateful-xf

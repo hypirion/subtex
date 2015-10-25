@@ -1,4 +1,4 @@
-(ns com.hypirion.subtex.pass.minted
+(ns com.hypirion.subtex.minted
   (:require [com.hypirion.rexf :as rexf]))
 
 (def ^:private begin-minted-match
