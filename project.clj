@@ -7,4 +7,5 @@
                "javac" "compile"]
   :source-paths ["src/clj"]
   :java-source-paths ["src/java"]
-  :dependencies [[org.clojure/clojure "1.8.0-beta1"]])
+  :dependencies [[org.clojure/clojure "1.8.0-beta1"]
+                 [com.hypirion/rexf "0.1.0-SNAPSHOT"]])

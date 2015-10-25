@@ -1,5 +1,5 @@
 (ns com.hypirion.subtex.pass.minted
-  (:require [com.hypirion.subtex.pass :as pass]))
+  (:require [com.hypirion.rexf :as rexf]))
 
 (def ^:private begin-minted-match
   [[:call "\\begin"] [:open-brace "{"] [:text "minted"] [:close-brace "}"]])
@@ -72,7 +72,7 @@
         [res (assoc state :acc new-acc)]))))
 
 (def process
-  (pass/stateful-xf
+  (rexf/stateful-xf
    (fn [rf]
      (let [state (volatile! {:state :start :acc []})]
        (fn ([] (rf))

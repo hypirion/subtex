@@ -1,22 +1,10 @@
 (ns com.hypirion.subtex.pass.hiccup
-  (:require [com.hypirion.subtex.pass :as pass])
+  (:require [com.hypirion.rexf :as rexf])
   (:import (java.util ArrayList)))
-
-(defn transform-invoke
-  [f]
-  (pass/stateless-xf
-   (fn [rf]
-     (fn ([] (rf))
-       ([res] (rf res))
-       ([res input]
-        (if (and (identical? (:type input) :invoke)
-                 (= name (:name input)))
-          (rf res (apply f (:args input)))
-          (rf res input)))))))
 
 (defn vectorize-invoke
   [name vect]
-  (pass/stateless-xf
+  (rexf/stateless-xf
    (fn [rf]
      (fn ([] (rf))
        ([res] (rf res))
@@ -40,7 +28,7 @@
   (comp h1 h2 h3 h4 strong em sub sup))
 
 (defn- to-li [subrf]
-  (let [val [:li (seq (pass/sub-complete @subrf))]]
+  (let [val [:li (seq (rexf/subcomplete @subrf))]]
     (vreset! subrf ::none)
     val))
 
@@ -48,7 +36,7 @@
   (identical? ::none val))
 
 (def item-to-li
-  (pass/stateful-xf
+  (rexf/stateful-xf
    (fn [rf]
      (let [in-item (volatile! ::none)]
        (fn ([] (rf))
@@ -64,11 +52,11 @@
                 (rf res (to-li in-item))
 
                 (not (none? @in-item))
-                (do (vswap! in-item pass/sub-step input) res)
+                (do (vswap! in-item rexf/substep input) res)
 
                 (and (identical? (:type input) :invoke)
                      (= "\\item" (:name input)))
-                (do (vreset! in-item (pass/subreduction rf)) res)
+                (do (vreset! in-item (rexf/subreduction rf)) res)
 
                 :otherwise
                 (rf res input))))))))
@@ -76,7 +64,7 @@
 (def itemize-to-ul
   "Everything not directly inside a [:li ...] is collateral damage. Also, args
   are ignored."
-  (pass/stateless-xf
+  (rexf/stateless-xf
    (fn  [rf]
      (fn ([] (rf))
        ([res]
@@ -92,7 +80,7 @@
 (def enumerate-to-ol
   "Everything not directly inside a [:li ...] is collateral damage. Also, args
   are ignored."
-  (pass/stateless-xf
+  (rexf/stateless-xf
    (fn [rf]
      (fn ([] (rf))
        ([res]
