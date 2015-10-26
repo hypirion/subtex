@@ -61,9 +61,9 @@ public class Tokenise implements Iterator<Item> {
                     state = lexer.eof();
                     continue loop;
                 }
-            case Error:
+            case None:
                 finished = true;
-                item = new Item(Token.Error.keyword, lexer.error);
+                item = null;
                 return;
             case End:
                 end -= lexer.backtrack;

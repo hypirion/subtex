@@ -9,7 +9,7 @@ class Lexer {
     enum State {
         Continue,
         End,
-        Error
+        None
     }
 
     enum Token {
@@ -19,8 +19,7 @@ class Lexer {
         OpenBrace("open-brace"),
         CloseBrace("close-brace"),
         Quoted("quoted"),
-        Comment("comment"),
-        Error("error");
+        Comment("comment");
 
         Token(String kw) {
             this.keyword = Keyword.intern(null, kw);
@@ -31,14 +30,11 @@ class Lexer {
 
     Token token;
     Function<Character, State> state;
-    String error;
     int backtrack;
-    
+
     Lexer() {
-        token = Token.Error;
         state = this::stateBegin;
         backtrack = 0;
-        error = null;
     }
 
     State state(Character c) {
@@ -46,15 +42,12 @@ class Lexer {
     }
 
     void reset() {
-        token = Token.Error;
         state = this::stateBegin;
         backtrack = 0;
-        error = null;
     }
 
-    State eof() { // FIXME.
-        error = "eof";
-        return State.Error;
+    State eof() {
+        return State.None;
     }
 
     State stateBegin(Character c) {
@@ -81,20 +74,13 @@ class Lexer {
     }
 
     State stateSlash0(Character c) {
-        switch (c) {
-        case '{':
-        case '}':
-        case '%':
-        case '\\':
-            token = Token.Quoted;
-            return State.End;
-        }
         if (Character.isLetter(c)) {
             state = this::stateSlash;
             return State.Continue;
         }
-        error = String.format("Unexpected character '%C' after '\\'.", c);
-        return State.Error;
+        // Token may or may not be unexpected; this is up to the user.
+        token = Token.Quoted;
+        return State.End;
     }
 
     State stateSlash(Character c) {
