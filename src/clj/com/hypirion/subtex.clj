@@ -84,10 +84,58 @@
   (rexf/stateful-xf
    (remove #(identical? (:type %) :comment))))
 
+(defn- omit-ws [^StringBuilder sb ^String s]
+  (loop [last-ws? (boolean (if (pos? (.length sb)) ;; check last elem in sb
+                             (= \space (.charAt sb (dec (.length sb))))
+                             false))
+         i 0]
+    (when (< i (.length s))
+      (let [c (.charAt s i)]
+        (cond (and last-ws? (Character/isWhitespace c))
+              (recur (boolean true) (inc i))
+
+              (Character/isWhitespace c)
+              (do (.append sb \space)
+                  (recur (boolean true) (inc i)))
+
+              :else
+              (do (.append sb c)
+                  (recur (boolean false) (inc i))))))))
+
+(def shrink-text
+  (rexf/stateful-xf
+   (fn [rf]
+     (let [sb (volatile! nil)]
+       (fn ([] (rf))
+         ([res]
+          (let [res (if @sb
+                      (unreduced (rf res {:type :text
+                                          :value (.toString @sb)}))
+                      res)]
+            (rf res)))
+         ([res input]
+          (cond (and (some? @sb) (identical? :text (:type input)))
+                (do (omit-ws @sb (:value input)) res)
+
+                (some? @sb)
+                (let [res (rf res {:type :text :value (.toString @sb)})]
+                  (vreset! sb nil)
+                  (if (reduced? res)
+                    res
+                    (rf res input)))
+
+                (identical? :text (:type input))
+                (do (vreset! sb (StringBuilder.))
+                    (omit-ws @sb (:value input))
+                    res)
+
+                :else
+                (rf res input))))))))
+
 (defn read
   [data]
   (rexf/into [:body]
              (comp minted/process remove-comments match-braces
                    group-calls group-env hiccup/item-to-li hiccup/itemize-to-ul
-                   hiccup/enumerate-to-ol hiccup/common-invokes)
+                   hiccup/enumerate-to-ol hiccup/common-invokes shrink-text)
              (iterator-seq (Tokenise. data))))
