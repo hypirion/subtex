@@ -65,6 +65,10 @@ public class Tokenise implements Iterator<Item> {
                 finished = true;
                 item = null;
                 return;
+            case Error:
+                 finished = true;
+                 item = new Item(Token.Error.keyword, lexer.error);
+                 return;
             case End:
                 end -= lexer.backtrack;
                 item = new Item(lexer.token.keyword, val.substring(start, end));

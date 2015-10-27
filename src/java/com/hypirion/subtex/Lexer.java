@@ -10,7 +10,8 @@ class Lexer {
     enum State {
         Continue,
         End,
-        None
+        None,
+        Error
     }
 
     enum Token {
@@ -20,7 +21,8 @@ class Lexer {
         OpenBrace("open-brace"),
         CloseBrace("close-brace"),
         Quoted("quoted"),
-        Comment("comment");
+        Comment("comment"),
+        Error("error");
 
         Token(String kw) {
             this.keyword = Keyword.intern(null, kw);
@@ -49,6 +51,7 @@ class Lexer {
     Token token;
     StateFn state;
     int backtrack;
+    String error;
 
     Lexer() {
         state = StateFn.Begin;
@@ -65,7 +68,35 @@ class Lexer {
     }
 
     State eof() {
-        return State.None;
+        switch (state) {
+        case Begin:
+            // Here we can at most contain a single newline. We can omit that
+            // without issues.
+            return State.None;
+        case Slash0:
+            token = Token.Error;
+            error = "Early termination of slash";
+            return State.Error;
+        case Slash:
+            token = Token.Call;
+            return State.End;
+        case InComment:
+            token = Token.Comment;
+            return State.End;
+        case Text:
+            token = Token.Text;
+            return State.End;
+        case TextNewline:
+            token = Token.Text;
+            return State.End;
+        case Newline0:
+            return State.None;
+        case Newlines:
+            token = Token.ParaEnd;
+            return State.End;
+        default:
+            throw new RuntimeException("Internal subtex lexer error");
+        }
     }
 
     State stateBegin(Character c) {
