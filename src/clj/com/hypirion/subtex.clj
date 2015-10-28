@@ -57,28 +57,32 @@
 
 ;; This doesn't really make sense because we can't really drag out the first
 ;; value, but oh well.
-(defn raw-env-name [env]
-  ;; yess. I don't even.
+(defn raw-env-name
+  [env]
   (get-in env [:args 0 :value 0 :value]))
 
-(def group-env
-  (rexf/group-with
-   (fn [elem] (case (:type elem)
-               :invoke (case (:name elem)
-                         "\\begin" true
-                         "\\end" (throw (ex-info "Unmatched environment ending" {:value elem}))
-                         false)
-               false))
-   (fn [start end]
-     (and
-      (identical? (:type end) :invoke)
-      (= "\\end" (:name end))
-      (= (first (:args start)) (first (:args start)))))
-   (fn [start val _]
-     {:type :env
-      :name (raw-env-name start)
-      :args (vec (rest (:args start)))
-      :value val})))
+;; TODO: Passing a function IN isn't really that sensical I believe. It should
+;; rather be done downstream
+(defn group-env
+  ([] (group-env raw-env-name))
+  ([env-fn]
+   (rexf/group-with
+    (fn [elem] (case (:type elem)
+                :invoke (case (:name elem)
+                          "\\begin" true
+                          "\\end" (throw (ex-info "Unmatched environment ending" {:value elem}))
+                          false)
+                false))
+    (fn [start end]
+      (and
+       (identical? (:type end) :invoke)
+       (= "\\end" (:name end))
+       (= (first (:args start)) (first (:args start)))))
+    (fn [start val _]
+      {:type :env
+       :name (env-fn start)
+       :args (vec (rest (:args start)))
+       :value val}))))
 
 (def remove-comments
   (rexf/stateful-xf
@@ -132,10 +136,22 @@
                 :else
                 (rf res input))))))))
 
+(def minted-to-pre
+  (rexf/stateless-xf
+   (fn [rf]
+     (fn ([] (rf))
+       ([res] (rf res))
+       ([res input]
+        (if (identical? :minted (:type input))
+          (rf res [:pre (:value input)])
+          (rf res input)))))))
+
 (defn read
   [data]
   (rexf/into [:body]
              (comp minted/process remove-comments match-braces
-                   group-calls group-env hiccup/item-to-li hiccup/itemize-to-ul
-                   hiccup/enumerate-to-ol hiccup/common-invokes shrink-text)
+                   group-calls (group-env #(get-in % [:args 0 :value 0])) hiccup/item-to-li
+                   hiccup/itemize-to-ul hiccup/enumerate-to-ol
+                   hiccup/common-invokes shrink-text hiccup/paragraphiphy
+                   minted-to-pre)
              (iterator-seq (Tokenise. data))))
