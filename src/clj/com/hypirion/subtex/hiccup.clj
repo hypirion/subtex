@@ -1,6 +1,7 @@
 (ns com.hypirion.subtex.hiccup
   (:require [com.hypirion.rexf :as rexf])
-  (:import (java.util ArrayList)))
+  (:import (com.hypirion.rexf ReducerFactory Reducer)
+           (java.util ArrayList)))
 
 (defn vectorize-invoke
   [name vect]
@@ -24,6 +25,8 @@
 (def sub    (vectorize-invoke "\\textsubscript" :sub))
 (def sup    (vectorize-invoke "\\textsuperscript" :sup))
 
+;; hrule, footnote, texttt (?)
+
 (def common-invokes
   (comp h1 h2 h3 h4 strong em sub sup))
 
@@ -32,7 +35,7 @@
     (vreset! subrf ::none)
     val))
 
-(defn none? [val] ;; inline
+(defn none? [val] ;; todo: inline
   (identical? ::none val))
 
 (def item-to-li
@@ -92,3 +95,30 @@
                                      (identical? (first %) :li))
                                (:value input))])
           (rf res input)))))))
+
+(def ^:private text-value
+  (rexf/stateless-xf
+   (fn [rf]
+     (fn
+       ([] (rf))
+       ([res] (rf res))
+       ([res input]
+        (cond (identical? :text (:type input)) (rf res (:value input))
+              (identical? :para-end (:type input)) res
+              :else (rf res input)))))))
+
+(defn paragraphiphy
+  [rf]
+  (reify ReducerFactory
+    (init [_]
+      (let [rf' (rexf/init rf)
+            reinit-rf (text-value rf)]
+        (reify clojure.lang.IFn
+          (invoke [_] (rf'))
+          (invoke [_ res] (rf' res))
+          (invoke [_ res input]
+            (cond (identical? :text (:type input)) (rf res [:p (:value input)])
+                  (identical? :para-end (:type input)) res
+                  :else (rf res input)))
+          Reducer
+          (reinit [_] (rexf/init reinit-rf)))))))
