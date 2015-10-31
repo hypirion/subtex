@@ -12,7 +12,7 @@
        ([res input]
         (if (and (identical? (:type input) :invoke)
                  (= name (:name input)))
-          (rf res [vect (-> input :args first :value seq)])
+          (rf res [vect (-> input :args first seq)])
           (rf res input)))))))
 
 (def h1 (vectorize-invoke "\\title" :h1))

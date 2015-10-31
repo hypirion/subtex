@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [read])
   (:require [com.hypirion.rexf :as rexf]
             [com.hypirion.subtex.minted :as minted]
+            [com.hypirion.subtex.util :as util :refer [invoke?]]
             [com.hypirion.subtex.hiccup :as hiccup])
   (:import (com.hypirion.subtex Tokenise)))
 
@@ -40,7 +41,7 @@
          ([res input]
           (if @call
             (case (:type input)
-              :param (do (vswap! subrf rexf/substep input) res)
+              :param (do (vswap! subrf rexf/substep (:value input)) res)
               :call (let [val (to-invokation call subrf)]
                       (vreset! call input)
                       (vreset! subrf (rexf/subreduction rf))
@@ -59,20 +60,16 @@
 ;; value, but oh well.
 (defn raw-env-name
   [env]
-  (get-in env [:args 0 :value 0 :value]))
+  (get-in env [:args 0 0 :value]))
 
 ;; TODO: Passing a function IN isn't really that sensical I believe. It should
-;; rather be done downstream
+;; rather be done downstream. Also, fixup that throw ex-info
 (defn group-env
   ([] (group-env raw-env-name))
   ([env-fn]
    (rexf/group-with
-    (fn [elem] (case (:type elem)
-                :invoke (case (:name elem)
-                          "\\begin" true
-                          "\\end" (throw (ex-info "Unmatched environment ending" {:value elem}))
-                          false)
-                false))
+    (fn [elem] (and (identical? :invoke (:type elem))
+                   (= "\\begin" (:name elem))))
     (fn [start end]
       (and
        (identical? (:type end) :invoke)
@@ -146,12 +143,110 @@
           (rf res [:pre (:value input)])
           (rf res input)))))))
 
+(defn read-if-properties [prop-name]
+  (let [if-prop (str "\\if" prop-name)]
+    (rexf/stateful-xf
+     (fn [rf]
+       (let [in-if? (volatile! false)
+             prev-newif? (volatile! false)
+             val (volatile! nil)]
+         (fn ([] (rf))
+           ([res] (if @in-if?
+                    (throw (ex-info "Unmatched if opening" {:name prop-name}))
+                    (rf res)))
+           ([res input]
+            (if @in-if?
+              (cond (and (invoke? input) (= "\\fi" (:name input)))
+                    (let [res (rf res {:type :properties
+                                       :value (rexf/subcomplete @val)})]
+                      (vreset! in-if? false)
+                      (vreset! prev-newif? false)
+                      (vreset! val nil)
+                      res)
+
+                    (and (identical? (:type input) :invoke)
+                         (= if-prop (:name input)))
+                    (throw (ex-info "Nested \\ifprop command" {:name prop-name}))
+
+                    :else
+                    (do (vswap! val rexf/substep input)
+                        res))
+              ;; if (not @in-if?)
+              (cond (and (identical? (:type input) :invoke)
+                         (= if-prop (:name input))
+                         @prev-newif?)
+                    (do (vreset! prev-newif? false)
+                        (rf res input))
+
+                    (and (identical? (:type input) :invoke)
+                         (= if-prop (:name input)))
+                    (do (vreset! val (rexf/reduction rexf/conj!))
+                        (vreset! in-if? true)
+                        res)
+
+                    (and (identical? (:type input) :invoke)
+                         (= "\\newif" (:name input)))
+                    (do (vreset! prev-newif? true)
+                        (rf res input))
+
+                    :else
+                    (do (vreset! prev-newif? false)
+                        (rf res input)))))))))))
+
+(defn read-document
+  [rfactory]
+  (rexf/stateful-xf
+   (fn [rf]
+     (let [inner-rf (volatile! nil)]
+       (fn ([] (rf))
+         ([res]
+          (if @inner-rf ;; couldn't close subreduction
+            (throw (ex-info "Open document environment" {:value @inner-rf}))
+            (rf res)))
+         ([res input] ;; gobble gobble
+          (if @inner-rf
+            (cond (and (invoke? input)
+                       (= "\\end" (:name input))
+                       (= "document" (raw-env-name input)))
+                  (let [produced (rexf/subcomplete @inner-rf)]
+                    (vreset! inner-rf nil)
+                    (rf res {:type :document :value produced}))
+
+                  (and (invoke? input)
+                       (= "\\begin" (:name input))
+                       (= "document" (raw-env-name input)))
+                  (throw (ex-info "Nested document environment" {}))
+
+                  :else
+                  (do (vswap! inner-rf rexf/substep input)
+                      res))
+            (cond (and (invoke? input)
+                       (= "\\end" (:name input))
+                       (= "document" (raw-env-name input)))
+                  (throw (ex-info "Closing document environment, but have no matching opening"
+                                  {}))
+
+                  (and (invoke? input)
+                       (= "\\begin" (:name input))
+                       (= "document" (raw-env-name input)))
+                  (do (vreset! inner-rf (rexf/reduction rfactory))
+                      res)
+
+                  :else
+                  (rf res input)))))))))
+
+(def rdoc
+  (read-document
+   ((comp (group-env)
+           hiccup/item-to-li
+           hiccup/itemize-to-ul hiccup/enumerate-to-ol
+           hiccup/common-invokes shrink-text hiccup/paragraphiphy
+           minted-to-pre)
+    rexf/conj!)))
+
 (defn read
   [data]
-  (rexf/into [:body]
+  (rexf/into []
              (comp minted/process remove-comments match-braces
-                   group-calls (group-env #(get-in % [:args 0 :value 0])) hiccup/item-to-li
-                   hiccup/itemize-to-ul hiccup/enumerate-to-ol
-                   hiccup/common-invokes shrink-text hiccup/paragraphiphy
-                   minted-to-pre)
+                   group-calls (read-if-properties "post") rdoc)
              (iterator-seq (Tokenise. data))))
