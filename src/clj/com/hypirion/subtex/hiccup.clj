@@ -50,9 +50,12 @@
                         (unreduced (rf res v))))]
             (rf res)))
          ([res input]
-          (cond (and (not (none? @in-item)) (identical? (:type input) :invoke)
+          (cond (and (not (none? @in-item))
+                     (identical? (:type input) :invoke)
                      (= "\\item" (:name input)))
-                (rf res (to-li in-item))
+                (let [li (to-li in-item)]
+                  (vreset! in-item (rexf/subreduction rf))
+                  (rf res li))
 
                 (not (none? @in-item))
                 (do (vswap! in-item rexf/substep input) res)
