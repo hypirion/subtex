@@ -53,8 +53,15 @@
        [:a {:href (ffirst (:args input))} (ffirst (:args input))]
        input))))
 
+(def img
+  (rexf/map
+   (fn [input]
+     (if (invoke= "\\includegraphics" input)
+       [:img {:src (ffirst (:args input))}]
+       input))))
+
 (def common-invokes
-  (comp h1 h2 h3 h4 strong em code sub sup hrule newline url href rm-maketitle))
+  (comp h1 h2 h3 h4 strong em code sub sup hrule newline url href img rm-maketitle))
 
 (defn- to-li [subrf]
   (let [val [:li (seq (rexf/subcomplete @subrf))]]
