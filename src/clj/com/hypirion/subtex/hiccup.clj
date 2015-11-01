@@ -22,19 +22,39 @@
 
 (def strong (vectorize-invoke "\\textbf" :strong))
 (def em     (vectorize-invoke "\\emph" :em))
+(def code   (vectorize-invoke "\\texttt" :code))
 (def sub    (vectorize-invoke "\\textsubscript" :sub))
 (def sup    (vectorize-invoke "\\textsuperscript" :sup))
 
+(def hrule
+  (rexf/map #(if (invoke= "\\hrule" %) [:hr] %)))
+
 (def newline
   (rexf/map #(if (or (and (quoted? %) (= "\\\\" (:value %)))
-                     (and (invoke? %) (= "\\newline" (:name %))))
+                     (invoke= "\\newline" %))
                [:br]
                %)))
 
-;; hrule, footnote, texttt (?)
+(def rm-maketitle
+  (rexf/remove #(invoke= "\\maketitle" %)))
+
+(def href
+  (rexf/map
+   (fn [input]
+     (if (invoke= "\\href" input)
+       (into [:a {:href (ffirst (:args input))}] ;; hmm, we should maybe unescape html then reescape as url?
+             (second (:args input)))
+       input))))
+
+(def url
+  (rexf/map
+   (fn [input]
+     (if (invoke= "\\url" input)
+       [:a {:href (ffirst (:args input))} (ffirst (:args input))]
+       input))))
 
 (def common-invokes
-  (comp h1 h2 h3 h4 strong em sub sup newline))
+  (comp h1 h2 h3 h4 strong em code sub sup hrule newline url href rm-maketitle))
 
 (defn- to-li [subrf]
   (let [val [:li (seq (rexf/subcomplete @subrf))]]
