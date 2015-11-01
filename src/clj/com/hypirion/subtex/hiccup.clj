@@ -1,10 +1,14 @@
 (ns com.hypirion.subtex.hiccup
-  (:refer-clojure :exclude [newline])
+  (:refer-clojure :exclude [newline read-string])
   (:require [com.hypirion.rexf :as rexf]
+            [com.hypirion.subtex :as tex]
+            [com.hypirion.subtex.minted :as minted]
+            [com.hypirion.subtex.properties :as props]
             [com.hypirion.subtex.util :refer [invoke? invoke= quoted? para-end?
                                               text? env? env=]]
             [hiccup.core :refer [h]]) ;; h == html-escape
   (:import (com.hypirion.rexf ReducerFactory Reducer)
+           (com.hypirion.subtex Tokenise)
            (java.util ArrayList)))
 
 (defn vectorize-invoke
@@ -217,3 +221,25 @@
 
                    :else
                    (rf res input))))))))))
+
+(def ^:private rdoc
+  (tex/read-document
+   ((comp (tex/group-env #(get-in % [:args 0 0]))
+          item-to-li
+          itemize-to-ul enumerate-to-ol
+          common-invokes text-value (footnote*)
+          tex/shrink-text tex/minted-to-pre
+          paragraphiphy)
+    rexf/conj!)))
+
+(def ^:private default-transducer
+  (comp minted/process tex/remove-comments tex/match-braces
+        tex/group-calls (tex/read-if-properties "post" props/common)
+        rdoc (rexf/toplevel tex/filter-data)))
+
+(defn read-string
+  [s]
+  (->>
+   (iterator-seq (Tokenise. s))
+   (rexf/into [] default-transducer)
+   (into {})))

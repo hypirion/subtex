@@ -1,11 +1,6 @@
 (ns com.hypirion.subtex
-  (:refer-clojure :exclude [read])
   (:require [com.hypirion.rexf :as rexf]
-            [com.hypirion.subtex.minted :as minted]
-            [com.hypirion.subtex.util :as util :refer [invoke?]]
-            [com.hypirion.subtex.properties :as props]
-            [com.hypirion.subtex.hiccup :as hiccup])
-  (:import (com.hypirion.subtex Tokenise)))
+            [com.hypirion.subtex.util :as util :refer [invoke?]]))
 
 (def match-braces
   (rexf/group-with
@@ -239,24 +234,6 @@
                 (rexf/reinit (:rf @inner-rf))
                 (rexf/reinit rf)))))))))
 
-(def rdoc
-  (read-document
-   ((comp (group-env #(get-in % [:args 0 0]))
-           hiccup/item-to-li
-           hiccup/itemize-to-ul hiccup/enumerate-to-ol
-           hiccup/common-invokes hiccup/text-value (hiccup/footnote*)
-           shrink-text minted-to-pre
-           hiccup/paragraphiphy)
-    rexf/conj!)))
-
 (def filter-data
   (comp (filter (comp #{:document :properties} :type))
         (map (juxt :type :value))))
-
-(defn read
-  [data]
-  (rexf/into []
-             (comp minted/process remove-comments match-braces
-                   group-calls (read-if-properties "post" props/common) rdoc
-                   (rexf/toplevel filter-data))
-             (iterator-seq (Tokenise. data))))
