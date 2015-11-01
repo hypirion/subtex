@@ -1,19 +1,18 @@
 (ns com.hypirion.subtex.hiccup
-  (:require [com.hypirion.rexf :as rexf])
+  (:refer-clojure :exclude [newline])
+  (:require [com.hypirion.rexf :as rexf]
+            [com.hypirion.subtex.util :refer [invoke? invoke= quoted? para-end?
+                                              text? env?]])
   (:import (com.hypirion.rexf ReducerFactory Reducer)
            (java.util ArrayList)))
 
 (defn vectorize-invoke
   [name vect]
-  (rexf/stateless-xf
-   (fn [rf]
-     (fn ([] (rf))
-       ([res] (rf res))
-       ([res input]
-        (if (and (identical? (:type input) :invoke)
-                 (= name (:name input)))
-          (rf res [vect (-> input :args first seq)])
-          (rf res input)))))))
+  (rexf/map
+   (fn [input]
+     (if (invoke= name input)
+       [vect (-> input :args first seq)]
+       input))))
 
 (def h1 (vectorize-invoke "\\title" :h1))
 (def h2 (vectorize-invoke "\\section" :h2))
@@ -25,10 +24,16 @@
 (def sub    (vectorize-invoke "\\textsubscript" :sub))
 (def sup    (vectorize-invoke "\\textsuperscript" :sup))
 
+(def newline
+  (rexf/map #(if (or (and (quoted? %) (= "\\\\" (:value %)))
+                     (and (invoke? %) (= "\\newline" (:name %))))
+               [:br]
+               %)))
+
 ;; hrule, footnote, texttt (?)
 
 (def common-invokes
-  (comp h1 h2 h3 h4 strong em sub sup))
+  (comp h1 h2 h3 h4 strong em sub sup newline))
 
 (defn- to-li [subrf]
   (let [val [:li (seq (rexf/subcomplete @subrf))]]
@@ -99,29 +104,57 @@
                                (:value input))])
           (rf res input)))))))
 
-(def ^:private text-value
-  (rexf/stateless-xf
-   (fn [rf]
-     (fn
-       ([] (rf))
-       ([res] (rf res))
-       ([res input]
-        (cond (identical? :text (:type input)) (rf res (:value input))
-              (identical? :para-end (:type input)) res
-              :else (rf res input)))))))
+;; href
+;; url
 
-(defn paragraphiphy
-  [rf]
-  (reify ReducerFactory
-    (init [_]
-      (let [rf' (rexf/init rf)
-            reinit-rf (text-value rf)]
-        (reify clojure.lang.IFn
-          (invoke [_] (rf'))
-          (invoke [_ res] (rf' res))
-          (invoke [_ res input]
-            (cond (identical? :text (:type input)) (rf res [:p (:value input)])
-                  (identical? :para-end (:type input)) res
-                  :else (rf res input)))
-          Reducer
-          (reinit [_] (rexf/init reinit-rf)))))))
+(def text-value
+  (rexf/map
+   (fn [input]
+     (cond (identical? :text (:type input)) (:value input)
+           (identical? :quoted (:type input)) (subs (:value input) 1)
+           :else input))))
+
+(def blocklevels #{:address :article :aside :blockquote :canvas :dd :div :dl
+                   :fieldset :figcaption :figure :footer :form :h1 :h2 :h3 :h4
+                   :h5 :h6 :header :hgroup :hr :li :main :nav :noscript :ol
+                   :output :p :pre :section :table :tfoot :ul :video})
+
+(defn blocklevel? [elem]
+  (boolean (blocklevels (first elem))))
+
+(def paragraphiphy
+  (rexf/toplevel
+   (fn [rf]
+     (let [group (volatile! nil)]
+       (fn ([] (rf))
+         ([res]
+          (if @group
+            (let [elem @group]
+              (vreset! group nil)
+              (rf (unreduced (rf res elem))))))
+         ([res input]
+          (cond (and @group (identical? :para-end (:type input)))
+                (let [res (rf res @group)]
+                  (vreset! group nil)
+                  res)
+
+                (and @group (blocklevel? input))
+                (let [res (rf res @group)]
+                  (vreset! group nil)
+                  (if (reduced? res)
+                    res
+                    (rf res input)))
+
+                @group ;; (not (blocklevel? input))
+                (do (vswap! group conj input)
+                    res)
+
+                (blocklevel? input) ;; (not @group)
+                (rf res input)
+
+                (identical? :para-end (:type input))
+                res
+
+                :else
+                (do (vreset! group [:p input])
+                    res))))))))

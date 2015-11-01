@@ -3,6 +3,7 @@
   (:require [com.hypirion.rexf :as rexf]
             [com.hypirion.subtex.minted :as minted]
             [com.hypirion.subtex.util :as util :refer [invoke?]]
+            [com.hypirion.subtex.properties :as props]
             [com.hypirion.subtex.hiccup :as hiccup])
   (:import (com.hypirion.subtex Tokenise)))
 
@@ -110,24 +111,23 @@
        (fn ([] (rf))
          ([res]
           (let [res (if @sb
-                      (unreduced (rf res {:type :text
-                                          :value (.toString @sb)}))
+                      (unreduced (rf res (.toString @sb)))
                       res)]
             (rf res)))
          ([res input]
-          (cond (and (some? @sb) (identical? :text (:type input)))
-                (do (omit-ws @sb (:value input)) res)
+          (cond (and (some? @sb) (string? input))
+                (do (omit-ws @sb input) res)
 
                 (some? @sb)
-                (let [res (rf res {:type :text :value (.toString @sb)})]
+                (let [res (rf res (.toString @sb))]
                   (vreset! sb nil)
                   (if (reduced? res)
                     res
                     (rf res input)))
 
-                (identical? :text (:type input))
+                (string? input)
                 (do (vreset! sb (StringBuilder.))
-                    (omit-ws @sb (:value input))
+                    (omit-ws @sb input)
                     res)
 
                 :else
@@ -143,7 +143,7 @@
           (rf res [:pre (:value input)])
           (rf res input)))))))
 
-(defn read-if-properties [prop-name]
+(defn read-if-properties [prop-name rfactory]
   (let [if-prop (str "\\if" prop-name)]
     (rexf/stateful-xf
      (fn [rf]
@@ -180,7 +180,7 @@
 
                     (and (identical? (:type input) :invoke)
                          (= if-prop (:name input)))
-                    (do (vreset! val (rexf/reduction rexf/conj!))
+                    (do (vreset! val (rexf/reduction rfactory))
                         (vreset! in-if? true)
                         res)
 
@@ -195,58 +195,71 @@
 
 (defn read-document
   [rfactory]
-  (rexf/stateful-xf
-   (fn [rf]
-     (let [inner-rf (volatile! nil)]
-       (fn ([] (rf))
-         ([res]
-          (if @inner-rf ;; couldn't close subreduction
-            (throw (ex-info "Open document environment" {:value @inner-rf}))
-            (rf res)))
-         ([res input] ;; gobble gobble
-          (if @inner-rf
-            (cond (and (invoke? input)
-                       (= "\\end" (:name input))
-                       (= "document" (raw-env-name input)))
-                  (let [produced (rexf/subcomplete @inner-rf)]
-                    (vreset! inner-rf nil)
-                    (rf res {:type :document :value produced}))
+  (fn [outer-rfactory]
+    (reify rexf/ReducerFactory
+      (init [_]
+        (let [inner-rf (volatile! nil)
+              rf (rexf/init outer-rfactory)]
+          (reify clojure.lang.IFn
+            (invoke [_] (rf))
+            (invoke [_ res]
+              (if @inner-rf ;; couldn't close subreduction
+                (throw (ex-info "Open document environment" {:value @inner-rf}))
+                (rf res)))
+            (invoke [_ res input]
+              (if @inner-rf
+                (cond (and (invoke? input)
+                           (= "\\end" (:name input))
+                           (= "document" (get-in input [:args 0 0])))
+                      (let [produced (rexf/subcomplete @inner-rf)]
+                        (vreset! inner-rf nil)
+                        (rf res {:type :document :value produced}))
 
-                  (and (invoke? input)
-                       (= "\\begin" (:name input))
-                       (= "document" (raw-env-name input)))
-                  (throw (ex-info "Nested document environment" {}))
+                      (and (invoke? input)
+                           (= "\\begin" (:name input))
+                           (= "document" (raw-env-name input)))
+                      (throw (ex-info "Nested document environment" {}))
 
-                  :else
-                  (do (vswap! inner-rf rexf/substep input)
-                      res))
-            (cond (and (invoke? input)
-                       (= "\\end" (:name input))
-                       (= "document" (raw-env-name input)))
-                  (throw (ex-info "Closing document environment, but have no matching opening"
-                                  {}))
+                      :else
+                      (do (vswap! inner-rf rexf/substep input)
+                          res))
+                (cond (and (invoke? input)
+                           (= "\\end" (:name input))
+                           (= "document" (raw-env-name input)))
+                      (throw (ex-info "Closing document environment, but have no matching opening"
+                                      {}))
 
-                  (and (invoke? input)
-                       (= "\\begin" (:name input))
-                       (= "document" (raw-env-name input)))
-                  (do (vreset! inner-rf (rexf/reduction rfactory))
-                      res)
+                      (and (invoke? input)
+                           (= "\\begin" (:name input))
+                           (= "document" (raw-env-name input)))
+                      (do (vreset! inner-rf (rexf/reduction rfactory))
+                          res)
 
-                  :else
-                  (rf res input)))))))))
+                      :else
+                      (rf res input))))
+            rexf/Reducer
+            (reinit [_] ;; dispatch depending on whether we're outside or inside the document
+              (if @inner-rf
+                (rexf/reinit (:rf @inner-rf))
+                (rexf/reinit rf)))))))))
 
 (def rdoc
   (read-document
-   ((comp (group-env)
+   ((comp (group-env #(get-in % [:args 0 0]))
            hiccup/item-to-li
            hiccup/itemize-to-ul hiccup/enumerate-to-ol
-           hiccup/common-invokes shrink-text hiccup/paragraphiphy
-           minted-to-pre)
+           hiccup/common-invokes hiccup/text-value shrink-text minted-to-pre
+           hiccup/paragraphiphy)
     rexf/conj!)))
+
+(def filter-data
+  (comp (filter (comp #{:document :properties} :type))
+        (map (juxt :type :value))))
 
 (defn read
   [data]
   (rexf/into []
              (comp minted/process remove-comments match-braces
-                   group-calls (read-if-properties "post") rdoc)
+                   group-calls (read-if-properties "post" props/common) rdoc
+                   (rexf/toplevel filter-data))
              (iterator-seq (Tokenise. data))))
