@@ -149,7 +149,8 @@
           (if @group
             (let [elem @group]
               (vreset! group nil)
-              (rf (unreduced (rf res elem))))))
+              (rf (unreduced (rf res elem))))
+            (rf res)))
          ([res input]
           (cond (and @group (para-end? input))
                 (let [res (rf res @group)]
