@@ -2,7 +2,8 @@
   (:refer-clojure :exclude [newline])
   (:require [com.hypirion.rexf :as rexf]
             [com.hypirion.subtex.util :refer [invoke? invoke= quoted? para-end?
-                                              text? env? env=]])
+                                              text? env? env=]]
+            [hiccup.core :refer [h]]) ;; h == html-escape
   (:import (com.hypirion.rexf ReducerFactory Reducer)
            (java.util ArrayList)))
 
@@ -96,8 +97,8 @@
 (def text-value
   (rexf/map
    (fn [input]
-     (cond (text? input) (:value input)
-           (quoted? input) (subs (:value input) 1)
+     (cond (text? input) (h (:value input))
+           (quoted? input) (h (subs (:value input) 1))
            :else input))))
 
 (def blocklevels #{:address :article :aside :blockquote :canvas :dd :div :dl
