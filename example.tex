@@ -1,0 +1,54 @@
+% Hack to get compat with proper LaTeX
+\documentclass{article}
+\newif\ifpost
+\postfalse
+
+\ifpost
+\documentclass{blog}
+\title{This is my title}
+\tags{foo}{bar}{baz}{quux}
+\description{Further description of what this blogpost is about}
+\fi
+
+\newcommand{\printfootnotes}{} % latex will handle footnotes automatically, so
+                               % make this a dummy that ignores input
+\usepackage{hyperref}
+
+\begin{document}
+\maketitle
+This is a short tex-file on subtex, a Clojure parser that parses a subset of
+tex. The only supported output format as of now is hiccup, but you can make
+other output formats if you want to.
+
+Subtex is an interesting parser for a couple of reasons:
+
+\begin{itemize}
+\item It uses \href{https://github.com/hyPiRion/rexf}{\texttt{rexf}} under the
+  covers – a transducer library that enables recursive transducers.
+\item As it is transducer-based, it should be relatively easy to customise. You
+  can add new passes that you want to use, or remove ones you don't want to
+  use\footnote{For example, this way of printing footnotes may be customised by
+  removing the original \texttt{(footnote*)} call and replace it with whatever
+  you would prefer instead.}.
+\end{itemize}
+
+\textbf{However}, it is not a production quality library. It is currently just a
+  proof of concept that
+\begin{enumerate}
+\item Parsers could be more composable than what they are today
+\item Recursive transducers are possible (albeit somewhat confusing)
+\end{enumerate}
+
+\hrule
+
+To process this file into hiccup, you can enter the following into a repl:
+\begin{minted}{clj}
+(require '[com.hypirion.subtex.hiccup :as htex]
+         '[hiccup.core :as hiccup])
+
+(hiccup/html [:body (seq (:document (htex/read-string (slurp "example.tex"))))])
+\end{minted}
+
+\printfootnotes
+
+\end{document}
