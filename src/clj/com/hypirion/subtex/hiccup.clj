@@ -144,3 +144,48 @@
                 :else
                 (do (vreset! group [:p input])
                     res))))))))
+
+(defn- footnote-fn
+  [[key val]]
+  [:p key ":" val])
+
+(defn footnote*
+  ([] (footnote* 0
+                (fn [state]
+                  [(inc state) [:sup (str \[ (inc state) \])]])
+                (fn [rf res vals]
+                  (if (seq vals)
+                    (reduce rf res (concat [[:br] [:br] [:br] [:hr] [:br]]
+                                           (map footnote-fn vals)))
+                    res))))
+  ([init-state footnotemark-fn print-footnotes-fn]
+   (rexf/global-xf
+    (fn []
+      (let [state (volatile! init-state)
+            vals (volatile! [])]
+        (fn [rf]
+          (fn ([] (rf))
+            ([res]
+             (if (seq @vals)
+               (throw (ex-info "Completing, but still has footnotes to print" {}))
+               (rf res)))
+            ([res input]
+             (cond (invoke= "\\footnote" input)
+                   (let [[new-state value] (footnotemark-fn @state)
+                         num (inc (count @vals))
+                         marker-id (str "f" num "m")
+                         note-id (str "f" num "n")
+                         output [:a {:href (str "#" note-id) :id marker-id} value]
+                         key [:a {:href (str "#" marker-id) :id note-id} value]]
+                     (do (vswap! vals conj [key (-> input :args first seq)])
+                         (vreset! state new-state)
+                         (rf res output)))
+
+                   (invoke= "\\printfootnotes" input)
+                   (let [res (print-footnotes-fn rf res @vals)]
+                     (vreset! vals [])
+                     (vreset! state init-state)
+                     res)
+
+                   :else
+                   (rf res input))))))))))

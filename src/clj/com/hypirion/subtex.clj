@@ -244,7 +244,7 @@
    ((comp (group-env #(get-in % [:args 0 0]))
            hiccup/item-to-li
            hiccup/itemize-to-ul hiccup/enumerate-to-ol
-           hiccup/common-invokes hiccup/text-value shrink-text minted-to-pre
+           hiccup/common-invokes hiccup/text-value (hiccup/footnote*) shrink-text minted-to-pre
            hiccup/paragraphiphy)
     rexf/conj!)))
 
