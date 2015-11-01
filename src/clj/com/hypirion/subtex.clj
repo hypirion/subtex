@@ -83,8 +83,7 @@
        :value val}))))
 
 (def remove-comments
-  (rexf/stateful-xf
-   (remove #(identical? (:type %) :comment))))
+  (rexf/remove #(identical? (:type %) :comment)))
 
 (defn- omit-ws [^StringBuilder sb ^String s]
   (loop [last-ws? (boolean (if (pos? (.length sb)) ;; check last elem in sb
@@ -134,14 +133,11 @@
                 (rf res input))))))))
 
 (def minted-to-pre
-  (rexf/stateless-xf
-   (fn [rf]
-     (fn ([] (rf))
-       ([res] (rf res))
-       ([res input]
-        (if (identical? :minted (:type input))
-          (rf res [:pre (:value input)])
-          (rf res input)))))))
+  (rexf/map
+   (fn [input]
+     (if (identical? :minted (:type input))
+       [:pre (:value input)]
+       input))))
 
 (defn read-if-properties [prop-name rfactory]
   (let [if-prop (str "\\if" prop-name)]

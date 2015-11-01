@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [newline])
   (:require [com.hypirion.rexf :as rexf]
             [com.hypirion.subtex.util :refer [invoke? invoke= quoted? para-end?
-                                              text? env?]])
+                                              text? env? env=]])
   (:import (com.hypirion.rexf ReducerFactory Reducer)
            (java.util ArrayList)))
 
@@ -56,8 +56,7 @@
             (rf res)))
          ([res input]
           (cond (and (not (none? @in-item))
-                     (identical? (:type input) :invoke)
-                     (= "\\item" (:name input)))
+                     (invoke= "\\item" input))
                 (let [li (to-li in-item)]
                   (vreset! in-item (rexf/subreduction rf))
                   (rf res li))
@@ -65,8 +64,7 @@
                 (not (none? @in-item))
                 (do (vswap! in-item rexf/substep input) res)
 
-                (and (identical? (:type input) :invoke)
-                     (= "\\item" (:name input)))
+                (invoke= "\\item" input)
                 (do (vreset! in-item (rexf/subreduction rf)) res)
 
                 :otherwise
@@ -75,34 +73,22 @@
 (def itemize-to-ul
   "Everything not directly inside a [:li ...] is collateral damage. Also, args
   are ignored."
-  (rexf/stateless-xf
-   (fn  [rf]
-     (fn ([] (rf))
-       ([res]
-        (rf res))
-       ([res input]
-        (if (and (identical? (:type input) :env)
-                 (= "itemize" (:name input)))
-          (rf res [:ul (filter #(and (vector? %)
-                                     (identical? (first %) :li))
-                               (:value input))])
-          (rf res input)))))))
+  (rexf/map
+   (fn [input]
+     (if (env= "itemize" input)
+       [:ul (filter #(and (vector? %) (identical? (first %) :li))
+                    (:value input))]
+       input))))
 
 (def enumerate-to-ol
   "Everything not directly inside a [:li ...] is collateral damage. Also, args
   are ignored."
-  (rexf/stateless-xf
-   (fn [rf]
-     (fn ([] (rf))
-       ([res]
-        (rf res))
-       ([res input]
-        (if (and (identical? (:type input) :env)
-                 (= "enumerate" (:name input)))
-          (rf res [:ol (filter #(and (vector? %)
-                                     (identical? (first %) :li))
-                               (:value input))])
-          (rf res input)))))))
+  (rexf/map
+   (fn [input]
+     (if (env= "enumerate" input)
+       [:ol (filter #(and (vector? %) (identical? (first %) :li))
+                    (:value input))]
+       input))))
 
 ;; href
 ;; url
@@ -110,8 +96,8 @@
 (def text-value
   (rexf/map
    (fn [input]
-     (cond (identical? :text (:type input)) (:value input)
-           (identical? :quoted (:type input)) (subs (:value input) 1)
+     (cond (text? input) (:value input)
+           (quoted? input) (subs (:value input) 1)
            :else input))))
 
 (def blocklevels #{:address :article :aside :blockquote :canvas :dd :div :dl
@@ -133,7 +119,7 @@
               (vreset! group nil)
               (rf (unreduced (rf res elem))))))
          ([res input]
-          (cond (and @group (identical? :para-end (:type input)))
+          (cond (and @group (para-end? input))
                 (let [res (rf res @group)]
                   (vreset! group nil)
                   res)
@@ -152,7 +138,7 @@
                 (blocklevel? input) ;; (not @group)
                 (rf res input)
 
-                (identical? :para-end (:type input))
+                (para-end? input)
                 res
 
                 :else

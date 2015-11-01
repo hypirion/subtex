@@ -19,3 +19,7 @@
 
 (defn env? [input]
   (identical? (:type input) :env))
+
+(defn env= [name input]
+  (and (env? input)
+       (= name (:name input))))
